@@ -424,9 +424,12 @@ using UnsafeSymbolicTiledHloInstructionOrderedSet =
         UnsafeSymbolicTiledHloInstructionOperandAgnosticEq>;
 
 bool AnyOperandIsFusion(const HloInstruction& hlo) {
-  return absl::c_any_of(hlo.operands(), [](const HloInstruction* operand) {
-    return operand->opcode() == HloOpcode::kFusion;
-  });
+  bool result =
+      absl::c_any_of(hlo.operands(), [](const HloInstruction* operand) {
+        return operand->opcode() == HloOpcode::kFusion;
+      });
+  CHECK(!result) << "Nested fusion operand " << hlo.ToString();
+  return false;
 }
 
 // Returns whether the instruction is a conditional block for tiling.
@@ -652,11 +655,18 @@ bool ShouldDerivationSimplifyPointDimensions(const HloFusionAdaptor& fusion) {
     }
 
     if (instruction_adaptor.opcode() == HloOpcode::kFusion) {
-      auto nested_fusion_adaptor = HloFusionAdaptor::ForComputation(
-          instruction_adaptor.instruction().fused_instructions_computation());
-      if (!ShouldDerivationSimplifyPointDimensions(*nested_fusion_adaptor)) {
-        return false;
-      }
+      // CHECK(false) << "ShouldDerivationSimplifyPointDimensions: Nested
+      // fusions "
+      //                 "are not supported.";
+      LOG(WARNING)
+          << "ShouldDerivationSimplifyPointDimensions: Nested fusions are not "
+             "supported. Noop.";
+      // return false;
+      // auto nested_fusion_adaptor = HloFusionAdaptor::ForComputation(
+      //     instruction_adaptor.instruction().fused_instructions_computation());
+      // if (!ShouldDerivationSimplifyPointDimensions(*nested_fusion_adaptor)) {
+      //   return false;
+      // }
     }
   }
   return true;
@@ -698,13 +708,20 @@ absl::Status PopulateNestedParameters(
     }
 
     if (instruction_adaptor.opcode() == HloOpcode::kFusion) {
-      std::unique_ptr<HloFusionAdaptor> nested_fusion_adaptor =
-          HloFusionAdaptor::ForComputation(
-              instruction_adaptor.instruction()
-                  .fused_instructions_computation());
-      TF_RETURN_IF_ERROR(
-          PopulateNestedParameters(*nested_fusion_adaptor, parameter_mapping));
-      continue;
+      //   CHECK(false)
+      //       << "PopulateNestedParameters: Nested fusions are not supported.";
+      LOG(WARNING) << "PopulateNestedParameters: Nested fusions are not "
+                      "supported. Noop.";
+      //   continue;
+
+      //   std::unique_ptr<HloFusionAdaptor> nested_fusion_adaptor =
+      //       HloFusionAdaptor::ForComputation(
+      //           instruction_adaptor.instruction()
+      //               .fused_instructions_computation());
+      //   TF_RETURN_IF_ERROR(
+      //       PopulateNestedParameters(*nested_fusion_adaptor,
+      //       parameter_mapping));
+      //   continue;
     }
 
     if (IsSomeDot(instruction_adaptor.instruction())) {
@@ -943,6 +960,7 @@ SymbolicTileAnalysis::AnalyzeNestedFusion(
     IndexingMap::SimplifyPointDimensions simplification_mode,
     EmitterSpecificConstraintsBuilder emitter_specific_constraints_builder,
     std::vector<SymbolicTiledHloInstruction*> root_runtime_variables) {
+  CHECK(false) << "AnalyzeNestedFusion: should not be called";
   auto nested_roots = ToInstructions(fusion_adaptor.GetRoots());
   // Nested fusions can be empty. Walk up to the parent parameter. This
   // avoids touching the delicate HloFusionAdaptor logic.
@@ -1278,6 +1296,7 @@ SymbolicTileAnalysis::AnalyzeFromInstruction(
       continue;
     }
     if (hlo->opcode() == HloOpcode::kFusion) {
+      CHECK(false) << "AnalyzeFromInstruction: nested fusion";
       // Don't analyze parameter operands of nested fusions.
       continue;
     }
@@ -1310,6 +1329,7 @@ SymbolicTileAnalysis::AnalyzeFromInstruction(
       std::unique_ptr<SymbolicTiledHloInstruction> tiled_operand;
       if (operand.opcode() == HloOpcode::kFusion &&
           fusion.ContainsInstruction(&operand.instruction())) {
+        CHECK(false) << "AnalyzeFromInstruction: nested fusion";
         // The operand is a nested fusion, analyze it recursively.
         std::unique_ptr<HloFusionAdaptor> nested_fusion_adaptor =
             HloFusionAdaptor::ForComputation(
@@ -1913,6 +1933,8 @@ absl::StatusOr<std::unique_ptr<TiledHloInstruction>> ComputeTiledHloInstruction(
   if (const auto* symbolic_fusion_tiling =
           dynamic_cast<const SymbolicTiledHloFusionInstruction*>(
               symbolic_tiled_hlo)) {
+    CHECK(false) << "ComputeTiledHloInstruction: "
+                    "SymbolicTiledHloFusionInstruction encountered";
     std::optional<std::vector<Interval>> fusion_tile_dim_bounds;
     if (hlo->opcode() == HloOpcode::kFusion && !hlo->users().empty() &&
         hlo->users().front()->opcode() == HloOpcode::kConcatenate) {
